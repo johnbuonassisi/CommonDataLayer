@@ -2,12 +2,12 @@
 
 ## Preamble
 
-Contents of this folder aren't meant for use on production and they may be lagging behind our k8s deployment. 
-Sole purpose of this directory is to prepare exemplary development environment, from which anyone can startup their development on 
+Contents of this folder aren't meant for use on production and they may be lagging behind our k8s deployment.
+Sole purpose of this directory is to prepare exemplary development environment, from which anyone can startup their development on
 `common data layer` without Kubernetes knowledge. Contents of docker-compose may not contain all applications, so be aware of that. You may alter it
 on your local machine to your needs.
 
-For k8s deployment, please refer to our [documentation](../../docs/K8s-Local-Deployment.md). 
+For k8s deployment, please refer to our [documentation](../../docs/K8s-Local-Deployment.md).
 
 ## Requirements
 * docker
@@ -17,7 +17,7 @@ For k8s deployment, please refer to our [documentation](../../docs/K8s-Local-Dep
 ## Deployment
 You must first add environment variables:
 
-`DOCKER_BUILDKIT=1`  
+`DOCKER_BUILDKIT=1`
 `COMPOSE_DOCKER_CLI_BUILD=1`
 
 Due to services needing additional startup time, we advise to let docker setup infrastructure first, and deploy CDL after. So...
@@ -72,10 +72,12 @@ Registry address is `http://localhost:50101`.
 
 eg.
 
+* Create basic schema and add it to the system:
 * Adding new schema:
-> `cargo run -p cdl-cli -- --registry-addr "http://localhost:50101" schema add --name default-document`
+> `echo "{}" > schema.json`
+> `cargo run -p cdl-cli -- --registry-addr "http://localhost:50101" schema add --name default-document --file schema.json --topic "cdl.document.input" --query-address "http://postgres_query1:50102"`
 
-* Setting schema topic (in order for this schema to be routed to `command-service` topic must be `cdl.document.input`)
+* Setting schema topic can be also done as a separate step (in order for this schema to be routed to `command-service` topic must be `cdl.document.input`)
 > `cargo run -p cdl-cli -- --registry-addr "http://localhost:50101" schema set-topic --id 0a626bba-15ff-11eb-8004-000000000000 --topic "cdl.document.input"`
 
 * Getting all schemas
@@ -88,3 +90,15 @@ We can query postgres for data on [localhost:50102](http://localhost:50102) via 
 ### Query router
 
 Available at [localhost:50103](http://localhost:50103) via REST API. No JSON API documentation yet, please refer to source code.
+
+Query router can be called with following commands:
+curl -H "SCHEMA_ID: {schema_id}" http://localhost:50103/single/object-uuid
+curl -H "SCHEMA_ID: {schema_id}" http://localhost:50103/multiple/comma,separated,object_ids
+curl -H "SCHEMA_ID: {schema_id}" http://localhost:50103/schema
+
+For example:
+`curl -H "SCHEMA_ID: 843c8518-2b1b-11eb-800c-000000000000" http://localhost:50103/single/b0b2b146-0f3d-4887-94d3-7b5088a6f12e`
+
+
+To populate system it is possible to use:
+`cargo run -p benchmarking --bin upload_to_rabbitmq -- --address "amqp://localhost:5672" --count 8 --exchange cdl --queue cdl.data.input --schema-id 843c8518-2b1b-11eb-800c-000000000000`
