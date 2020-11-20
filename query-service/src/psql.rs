@@ -58,10 +58,15 @@ impl PsqlQuery {
     }
 
     fn collect_id_payload_rows(rows: Vec<Row>) -> HashMap<String, Vec<u8>> {
-        rows.into_iter()
+        rows
+            .into_iter()
             .map(|row| {
-                let object_id = row.get::<usize, String>(0);
-                let value = row.get::<usize, String>(1).into_bytes();
+                let object_id = row
+                    .get::<usize, uuid::Uuid>(0)
+                    .to_hyphenated()
+                    .encode_upper(&mut uuid::Uuid::encode_buffer())
+                    .to_owned();
+                let value = serde_json::to_vec(&row.get::<usize, serde_json::Value>(1)).unwrap();
                 (object_id, value)
             })
             .collect()
@@ -75,13 +80,25 @@ impl Query for PsqlQuery {
         request: Request<ObjectIds>,
     ) -> Result<Response<ValueMap>, Status> {
         counter!("cdl.query-service.query-multiple.psql", 1);
+
+        let object_uuids = request
+            .into_inner()
+            .object_ids
+            .iter()
+            .map(|x| {
+                uuid::Uuid::parse_str(x).map_err(|err| {
+                    Status::internal(format!("Unable to parse string to Uuid: {}", err))
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
         let rows = self
             .make_query(
                 "SELECT object_id, payload FROM data d1 \
-                WHERE object_id in $1 AND d1.version = \
+                WHERE object_id = ANY($1) AND d1.version = \
                     (SELECT MAX(version) FROM data d2 \
                      WHERE d2.object_id = d1.object_id)",
-                &[&request.into_inner().object_ids],
+                &[&object_uuids],
             )
             .await?;
 
@@ -95,13 +112,17 @@ impl Query for PsqlQuery {
         request: Request<SchemaId>,
     ) -> Result<Response<ValueMap>, Status> {
         counter!("cdl.query-service.query-by-schema.psql", 1);
+
+        let schema_uuid = uuid::Uuid::parse_str(&request.into_inner().schema_id)
+            .map_err(|err| Status::internal(format!("Unable to parse string to Uuid: {}", err)))?;
+
         let rows = self
             .make_query(
                 "SELECT object_id, payload FROM data d1 \
                 WHERE schema_id = $1 AND d1.version = \
                     (SELECT MAX(version) FROM data d2 \
                      WHERE d2.object_id = d1.object_id)",
-                &[&request.into_inner().schema_id],
+                &[&schema_uuid],
             )
             .await?;
 
