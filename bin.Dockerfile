@@ -1,6 +1,6 @@
 FROM workspace:local AS cargo-build
 
-FROM frolvlad/alpine-glibc
+FROM alpine
 
 ARG BIN
 
