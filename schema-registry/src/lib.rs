@@ -1,7 +1,7 @@
 #![feature(drain_filter)]
 
-use crate::rpc::schema::schema_registry_client::SchemaRegistryClient;
-use crate::rpc::schema::{Empty, Id, ValueToValidate};
+use ::rpc::schema_registry::schema_registry_client::SchemaRegistryClient;
+use ::rpc::schema_registry::{Empty, Id, ValueToValidate};
 use error::RegistryClientError;
 use serde_json::Value;
 use tonic::{transport::Channel, Request};

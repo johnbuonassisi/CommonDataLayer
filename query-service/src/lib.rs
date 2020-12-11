@@ -1,4 +1,4 @@
-use schema::{query_client::QueryClient, ObjectIds, RawStatement, SchemaId};
+use rpc::query_service::{query_client::QueryClient, ObjectIds, RawStatement, SchemaId};
 use std::collections::HashMap;
 use tonic::transport::Channel;
 use utils::query_utils::error::ClientError;
@@ -6,10 +6,6 @@ use utils::query_utils::error::ClientError;
 pub mod druid;
 pub mod ds;
 pub mod psql;
-
-pub mod schema {
-    tonic::include_proto!("query");
-}
 
 pub async fn connect(addr: String) -> Result<QueryClient<Channel>, ClientError> {
     QueryClient::connect(addr)

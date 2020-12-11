@@ -1,5 +1,6 @@
 use crate::error::Error;
 use lru_cache::LruCache;
+use rpc::schema_registry as schema;
 use std::sync::{Mutex, MutexGuard};
 use utils::abort_on_poison;
 use uuid::Uuid;
@@ -30,7 +31,7 @@ impl AddressCache {
             .await
             .map_err(Error::RegistryConnectionError)?;
         let response = conn
-            .get_schema_query_address(schema_registry::rpc::schema::Id {
+            .get_schema_query_address(schema::Id {
                 id: schema_id.to_string(),
             })
             .await

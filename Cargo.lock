@@ -432,6 +432,7 @@ name = "cdl-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "rpc",
  "schema-registry",
  "semver 0.11.0",
  "serde",
@@ -735,6 +736,7 @@ dependencies = [
  "futures-util",
  "log",
  "lru-cache",
+ "rpc",
  "schema-registry",
  "serde",
  "serde_json",
@@ -2471,6 +2473,7 @@ dependencies = [
  "lru-cache",
  "query-service",
  "query-service-ts",
+ "rpc",
  "schema-registry",
  "serde_json",
  "structopt",

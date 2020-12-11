@@ -140,7 +140,9 @@ impl<D: Datastore> SchemaDb<D> {
     pub fn get_schema_topic(&self, id: Uuid) -> RegistryResult<String> {
         let conn = self.connect()?;
         let topic_property = conn
-            .get_vertex_properties(SpecificVertexQuery::single(id).property(Schema::TOPIC_NAME))?
+            .get_vertex_properties(
+                SpecificVertexQuery::single(id).property(Schema::INSERT_ADDRESS),
+            )?
             .into_iter()
             .next()
             .ok_or(RegistryError::NoSchemaWithId(id))?;
@@ -226,7 +228,7 @@ impl<D: Datastore> SchemaDb<D> {
     pub fn update_schema_topic(&self, id: Uuid, new_topic: String) -> RegistryResult<()> {
         self.ensure_schema_exists(id)?;
 
-        self.set_vertex_properties(id, &[(Schema::TOPIC_NAME, Value::String(new_topic))])?;
+        self.set_vertex_properties(id, &[(Schema::INSERT_ADDRESS, Value::String(new_topic))])?;
 
         Ok(())
     }

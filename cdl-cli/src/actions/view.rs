@@ -1,5 +1,5 @@
 use crate::utils::*;
-use schema_registry::rpc::schema::{Id, NewSchemaView, UpdatedView};
+use rpc::schema_registry::{Id, NewSchemaView, UpdatedView};
 use uuid::Uuid;
 
 pub async fn get_view(view_id: Uuid, registry_addr: String) -> anyhow::Result<()> {

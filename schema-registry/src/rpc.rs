@@ -8,11 +8,11 @@ use crate::{
 };
 use anyhow::Context;
 use indradb::SledDatastore;
-use schema::{
-    schema_registry_server::SchemaRegistry, Empty, Errors, Id, NewSchemaView, PodName,
-    SchemaNameUpdate, SchemaNames, SchemaQueryAddress, SchemaQueryAddressUpdate, SchemaTopic,
-    SchemaTopicUpdate, SchemaTypeUpdate, SchemaVersions, SchemaViews, UpdatedView, ValueToValidate,
-    VersionedId,
+use rpc::schema_registry::{
+    self as schema, schema_registry_server::SchemaRegistry, Empty, Errors, Id, NewSchemaView,
+    PodName, SchemaNameUpdate, SchemaNames, SchemaQueryAddress, SchemaQueryAddressUpdate,
+    SchemaTopic, SchemaTopicUpdate, SchemaTypeUpdate, SchemaVersions, SchemaViews, UpdatedView,
+    ValueToValidate, VersionedId,
 };
 use semver::Version;
 use semver::VersionReq;
@@ -22,10 +22,6 @@ use tonic::{Request, Response, Status};
 use utils::messaging_system::metadata_fetcher::KafkaMetadataFetcher;
 use utils::{abort_on_poison, messaging_system::Result};
 use uuid::Uuid;
-
-pub mod schema {
-    tonic::include_proto!("registry");
-}
 
 pub struct SchemaRegistryImpl {
     pub db: Arc<SchemaDb>,
@@ -100,11 +96,11 @@ impl SchemaRegistry for SchemaRegistryImpl {
 
         if !self
             .mq_metadata
-            .topic_exists(&new_schema.kafka_topic)
+            .topic_exists(&new_schema.insert_address)
             .await
             .map_err(RegistryError::from)?
         {
-            return Err(RegistryError::NoTopic(new_schema.kafka_topic).into());
+            return Err(RegistryError::NoTopic(new_schema.insert_address).into());
         }
 
         let new_id = self.db.add_schema(new_schema.clone(), schema_id)?;

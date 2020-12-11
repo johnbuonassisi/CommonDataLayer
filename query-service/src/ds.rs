@@ -1,8 +1,10 @@
-use crate::schema::{query_server::Query, ObjectIds, RawStatement, SchemaId, ValueBytes, ValueMap};
 use anyhow::Context;
 use bb8::{Pool, PooledConnection};
 use document_storage::grpc::schema::storage_client::StorageClient;
 use document_storage::grpc::schema::{RetrieveBySchemaRequest, RetrieveMultipleRequest};
+use rpc::query_service::{
+    query_server::Query, ObjectIds, RawStatement, SchemaId, ValueBytes, ValueMap,
+};
 use structopt::StructOpt;
 use tonic::transport::Channel;
 use tonic::{Code, Request, Response, Status};

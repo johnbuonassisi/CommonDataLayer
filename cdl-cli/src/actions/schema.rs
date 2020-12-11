@@ -1,11 +1,9 @@
 use crate::utils::*;
-use schema_registry::{
-    rpc::schema::{
-        Empty, Id, NewSchema, NewSchemaVersion, SchemaNameUpdate, SchemaQueryAddressUpdate,
-        SchemaTopicUpdate, SchemaTypeUpdate, ValueToValidate, VersionedId,
-    },
-    types::SchemaType,
+use rpc::schema_registry::{
+    Empty, Id, NewSchema, NewSchemaVersion, SchemaNameUpdate, SchemaQueryAddressUpdate,
+    SchemaTopicUpdate, SchemaTypeUpdate, ValueToValidate, VersionedId,
 };
+use schema_registry::types::SchemaType;
 use semver::{Version, VersionReq};
 use serde_json::Value;
 use std::path::PathBuf;

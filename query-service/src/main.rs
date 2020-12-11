@@ -1,5 +1,5 @@
 use anyhow::Context;
-use query_service::schema::query_server::{Query, QueryServer};
+use rpc::query_service::query_server::{Query, QueryServer};
 use std::net::{Ipv4Addr, SocketAddrV4};
 use structopt::StructOpt;
 use tonic::transport::Server;

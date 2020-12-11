@@ -1,4 +1,4 @@
-use crate::rpc::schema::schema_type;
+use ::rpc::schema_registry::schema_type;
 use indradb::{EdgeProperties, VertexProperties};
 use semver::{Version, VersionReq};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -65,7 +65,7 @@ impl NewSchema {
         let Self {
             name,
             definition,
-            insert_address: kafka_topic,
+            insert_address,
             query_address,
             schema_type,
         } = self;

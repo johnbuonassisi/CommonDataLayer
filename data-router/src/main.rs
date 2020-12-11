@@ -2,7 +2,8 @@ use anyhow::Context;
 use futures_util::stream::StreamExt;
 use log::error;
 use lru_cache::LruCache;
-use schema_registry::{connect_to_registry, rpc::schema::Id};
+use rpc::schema_registry::Id;
+use schema_registry::connect_to_registry;
 use serde::{Deserialize, Serialize};
 use std::{
     process,

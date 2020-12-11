@@ -12,16 +12,20 @@ name = "query-router"
 path = "src/main.rs"
 
 [dependencies]
-log         = "0.4"
-env_logger  = "0.8"
-warp        = "0.2"
+# workspace
+rpc              = { path = "../rpc" }
+query-service    = { path = "../query-service/" }
+query-service-ts = { path = "../query-service-ts/" }
+schema-registry  = { path = "../schema-registry/" }
+utils            = { path = "../utils/" }
+
+# cargo.io
 anyhow      = "1.0"
+env_logger  = "0.8"
+log         = "0.4"
 lru-cache   = "0.1"
 serde_json  = "1.0"
 structopt   = "0.3"
-utils       = { path = "../utils/" }
-uuid        = { version = "0.8", features = ["v1", "serde"] }
 tokio       = { version = "0.2", features = ["macros"] }
-query-service           = { path = "../query-service/" }
-query-service-ts           = { path = "../query-service-ts/" }
-schema-registry         = { path = "../schema-registry/" }
+uuid        = { version = "0.8", features = ["v1", "serde"] }
+warp        = "0.2"

@@ -1,5 +1,5 @@
 use anyhow::Context;
-use schema_registry::rpc::schema::schema_registry_client::SchemaRegistryClient;
+use rpc::schema_registry::schema_registry_client::SchemaRegistryClient;
 use serde_json::Value;
 use std::path::PathBuf;
 use tonic::transport::Channel;
