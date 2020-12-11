@@ -1,13 +1,16 @@
-use command_service::args::Args;
 use command_service::communication::MessageRouter;
-use command_service::input::{Error, KafkaInput, KafkaInputConfig};
+use command_service::input::{Error, KafkaInput};
 use command_service::output::{
     DruidOutputPlugin, OutputArgs, OutputPlugin, PostgresOutputPlugin, SleighOutputPlugin,
     VictoriaMetricsOutputPlugin,
 };
 use command_service::report::{FullReportSenderBase, ReportSender, ReportServiceConfig};
+use command_service::{args::Args, args::Input, input::GRPCInput, input::InputConfig};
 use log::trace;
+use rpc::command_service::cmd_service_server::CmdServiceServer;
+use std::net::{Ipv4Addr, SocketAddrV4};
 use structopt::StructOpt;
+use tonic::transport::Server;
 use utils::metrics;
 
 #[tokio::main]
@@ -21,6 +24,7 @@ async fn main() -> anyhow::Result<()> {
     match args.output_config {
         OutputArgs::Sleigh(sleigh_config) => {
             start_services(
+                args.input,
                 args.input_config,
                 args.report_config,
                 SleighOutputPlugin::new(sleigh_config).await?,
@@ -29,6 +33,7 @@ async fn main() -> anyhow::Result<()> {
         }
         OutputArgs::Postgres(postgres_config) => {
             start_services(
+                args.input,
                 args.input_config,
                 args.report_config,
                 PostgresOutputPlugin::new(postgres_config).await?,
@@ -37,6 +42,7 @@ async fn main() -> anyhow::Result<()> {
         }
         OutputArgs::Druid(druid_config) => {
             start_services(
+                args.input,
                 args.input_config,
                 args.report_config,
                 DruidOutputPlugin::new(druid_config).await?,
@@ -45,6 +51,7 @@ async fn main() -> anyhow::Result<()> {
         }
         OutputArgs::VictoriaMetrics(victoria_metrics_config) => {
             start_services(
+                args.input,
                 args.input_config,
                 args.report_config,
                 VictoriaMetricsOutputPlugin::new(victoria_metrics_config)?,
@@ -57,7 +64,8 @@ async fn main() -> anyhow::Result<()> {
 }
 
 async fn start_services(
-    input_config: KafkaInputConfig,
+    input: Input,
+    input_config: InputConfig,
     report_config: ReportServiceConfig,
     output: impl OutputPlugin,
 ) -> Result<(), Error> {
@@ -73,7 +81,27 @@ async fn start_services(
 
     let message_router = MessageRouter::new(report_service, output);
 
-    let input_service = KafkaInput::new(input_config, message_router).await?;
+    match input {
+        Input::Kafka => {
+            KafkaInput::new(input_config, message_router)
+                .await?
+                .listen()
+                .await?
+        }
+        Input::GRPC => {
+            let input = GRPCInput::new(message_router);
+            let addr = SocketAddrV4::new(
+                Ipv4Addr::new(0, 0, 0, 0),
+                input_config
+                    .grpc_port
+                    .ok_or(Error::MissingConfig("grpc_port"))?,
+            );
+            Server::builder()
+                .add_service(CmdServiceServer::new(input))
+                .serve(addr.into())
+                .await?;
+        }
+    }
 
-    input_service.listen().await
+    Ok(())
 }

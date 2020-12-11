@@ -5,6 +5,7 @@ fn main() -> std::io::Result<()> {
             "proto/docstore.proto",
             "proto/query.proto",
             "proto/registry.proto",
+            "proto/cmdservice.proto",
         ],
         &["proto/"],
     )

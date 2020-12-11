@@ -13,3 +13,7 @@ pub mod blob_store {
 pub mod query_service {
     tonic::include_proto!("query");
 }
+
+pub mod command_service {
+    tonic::include_proto!("cmdservice");
+}

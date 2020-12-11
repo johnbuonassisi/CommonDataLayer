@@ -1,90 +1,68 @@
-use crate::communication::{GenericMessage, MessageRouter};
-use crate::input::{Error, KafkaInputConfig};
-use crate::output::OutputPlugin;
-use futures_util::stream::StreamExt;
-use log::{error, trace};
-use std::process;
-use tokio::pin;
-use utils::message_types::CommandServiceInsertMessage;
-use utils::messaging_system::consumer::CommonConsumer;
-use utils::messaging_system::message::CommunicationMessage;
-use utils::messaging_system::Result;
-use utils::metrics::counter;
-use utils::task_limiter::TaskLimiter;
+mod kafka;
 
-pub struct KafkaInput<P: OutputPlugin> {
-    consumer: CommonConsumer,
-    message_router: MessageRouter<P>,
-    task_limiter: TaskLimiter,
-}
+mod grpc {
+    use log::trace;
+    use rpc::command_service::{cmd_service_server::CmdService, Empty, InsertMessage};
 
-impl<P: OutputPlugin> KafkaInput<P> {
-    pub async fn new(
-        config: KafkaInputConfig,
+    use tonic::{Request, Response, Status};
+    use utils::message_types::CommandServiceInsertMessage;
+
+    use crate::{
+        communication::GenericMessage, communication::MessageRouter, input::Error,
+        output::OutputPlugin,
+    };
+
+    pub struct GRPCInput<P: OutputPlugin> {
         message_router: MessageRouter<P>,
-    ) -> Result<Self, Error> {
-        let consumer =
-            CommonConsumer::new_kafka(&config.group_id, &config.brokers, &[&config.topic])
-                .await
-                .map_err(Error::ConsumerCreationFailed)?;
-
-        Ok(Self {
-            consumer,
-            message_router,
-            task_limiter: TaskLimiter::new(config.task_limit),
-        })
     }
 
-    async fn handle_message(
-        router: MessageRouter<P>,
-        message: Result<Box<dyn CommunicationMessage>>,
-    ) -> Result<(), Error> {
-        counter!("cdl.command-service.input-request", 1);
-        let message = message.map_err(Error::FailedReadingMessage)?;
-
-        let generic_message = Self::build_message(message.as_ref())?;
-
-        trace!("Received message {:?}", generic_message);
-
-        router
-            .handle_message(generic_message)
-            .await
-            .map_err(Error::CommunicationError)?;
-
-        Ok(())
-    }
-
-    fn build_message(message: &'_ dyn CommunicationMessage) -> Result<GenericMessage, Error> {
-        let json = message.payload().map_err(Error::MissingPayload)?;
-        let event: CommandServiceInsertMessage =
-            serde_json::from_str(json).map_err(Error::PayloadDeserializationFailed)?;
-
-        Ok(GenericMessage {
-            object_id: event.object_id,
-            schema_id: event.schema_id,
-            timestamp: event.timestamp,
-            payload: event.payload.to_string().as_bytes().to_vec(),
-        })
-    }
-
-    pub async fn listen(self) -> Result<(), Error> {
-        let consumer = self.consumer.leak();
-        let message_stream = consumer.consume().await;
-        pin!(message_stream);
-
-        while let Some(message) = message_stream.next().await {
-            let router = self.message_router.clone();
-
-            self.task_limiter
-                .run(async move || {
-                    if let Err(err) = Self::handle_message(router, message).await {
-                        error!("Failed to handle message: {}", err);
-                        process::abort();
-                    }
-                })
-                .await;
+    impl<P: OutputPlugin> GRPCInput<P> {
+        pub fn new(message_router: MessageRouter<P>) -> Self {
+            Self { message_router }
         }
 
-        Ok(())
+        async fn handle_message(
+            router: MessageRouter<P>,
+            message: InsertMessage,
+        ) -> Result<(), Error> {
+            let generic_message = Self::build_message(&message)?;
+            trace!("Received message {:?}", generic_message);
+
+            router
+                .handle_message(generic_message)
+                .await
+                .map_err(Error::CommunicationError)?;
+
+            Ok(())
+        }
+
+        fn build_message(message: &'_ InsertMessage) -> Result<GenericMessage, Error> {
+            let json = &message.payload;
+            let event: CommandServiceInsertMessage =
+                serde_json::from_slice(&json).map_err(Error::PayloadDeserializationFailed)?;
+
+            Ok(GenericMessage {
+                object_id: event.object_id,
+                schema_id: event.schema_id,
+                timestamp: event.timestamp,
+                payload: event.payload.to_string().as_bytes().to_vec(),
+            })
+        }
+    }
+
+    #[tonic::async_trait]
+    impl<P: OutputPlugin> CmdService for GRPCInput<P> {
+        async fn insert(&self, request: Request<InsertMessage>) -> Result<Response<Empty>, Status> {
+            let message = request.into_inner();
+            let router = self.message_router.clone();
+
+            match Self::handle_message(router, message).await {
+                Ok(_) => Ok(Response::new(Empty {})),
+                Err(err) => Err(Status::internal(err.to_string())),
+            }
+        }
     }
 }
+
+pub use grpc::GRPCInput;
+pub use kafka::KafkaInput;

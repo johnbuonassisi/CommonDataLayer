@@ -518,6 +518,7 @@ dependencies = [
  "log",
  "rdkafka",
  "reqwest",
+ "rpc",
  "serde",
  "serde_json",
  "structopt",
