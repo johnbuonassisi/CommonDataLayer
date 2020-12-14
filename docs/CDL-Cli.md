@@ -30,5 +30,5 @@ Views are a WIP feature, currently not used widely beside some cases in developm
 - random schema id will be assigned to the request
 
 ###### List schemas
-- will print all existing schema names and IDs:
+Will print all existing schema names and IDs:
 `cdl --registry-address "http:/localhost:6400 schema names`
