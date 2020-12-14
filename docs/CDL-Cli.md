@@ -26,7 +26,7 @@ views are a WIP feature, currently not used widely beside some cases in developm
 - if `--file` is provided, specific file must have valid json inside.
 - if `--file` is missing, you will be asked to provide json inside cli,
   to do so, insety valid json, followed by newline, and then press `ctrl+d` to finish editing
-  minimal valid json schema is `{}`
+- minimal valid json schema is `{}`
 - random schema id will be assigned to the request
 
 ###### list schemas
