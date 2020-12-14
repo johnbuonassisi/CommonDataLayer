@@ -166,16 +166,18 @@ mod tests {
         use test_case::test_case;
         use uuid::Uuid;
 
-        #[test_case(r#"[{"fields":{}, "ts": 15}]"#                => matches Err(Error::EmptyFields))]
+        #[test_case(r#"[{"fields":{}, "ts": 15},
+                       {"fields":{"a01": 10}, "ts": 15}]"#                => matches Err(Error::EmptyFields))]
         #[test_case(r#"[{"fields":{"y01": {}}, "ts": 10}]"#   => matches Err(Error::InvalidFieldType))]
         #[test_case(r#"[{"fields":{"y01": []}, "ts": 5}]"#   => matches Err(Error::InvalidFieldType))]
         #[test_case(r#"[{"fields":{"y01": null}, "ts": 1}]"#   => matches Err(Error::InvalidFieldType))]
         #[test_case(r#"[{"fields":{"y01": 123}, "ts": {}}]"#   => matches Err(Error::InvalidFieldType))]
         #[test_case(r#"[{"fields":{"y01": 1234}, "ts": []}]"#   => matches Err(Error::InvalidFieldType))]
         #[test_case(r#"[{"fields":{"y01": 12345}, "ts": null}]"#   => matches Err(Error::InvalidFieldType))]
+        #[test_case(r#"[{"fields":{"y01": 12345}, "ts": ""}]"#   => matches Err(Error::FieldTimeStampMissing))]
         #[test_case(r#"y00=32q,y01=14.0f"#     => matches Err(Error::DataCannotBeParsed(_)))]
         #[test_case(r#"{"fields" : {"y01": 13.4}, "ts": 123 }"#       => matches Err(Error::DataCannotBeParsed(_)))]
-        #[test_case(r#"[ 1, 13 ]"#             => matches Err(Error::DataCannotBeParsed(_)))]
+        #[test_case(r#"[ 1, 13]"#             => matches Err(Error::DataCannotBeParsed(_)))]
         fn produces_desired_errors(payload: &str) -> Result<String, Error> {
             build_line_protocol(Uuid::default(), Uuid::default(), payload.as_bytes())
         }
