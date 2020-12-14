@@ -1,7 +1,4 @@
-use crate::{
-    cache::{AddressCache, SchemaTypeCache},
-    error::Error,
-};
+use crate::{cache::SchemaRegistryCache, error::Error};
 use log::trace;
 use schema_registry::types::SchemaType;
 use serde::{Deserialize, Serialize};
@@ -23,14 +20,12 @@ pub enum Body {
 pub async fn query_single(
     object_id: Uuid,
     schema_id: Uuid,
-    address_cache: Arc<AddressCache>,
-    schema_type_cache: Arc<SchemaTypeCache>,
+    cache: Arc<SchemaRegistryCache>,
     request_body: Body,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     trace!("Received /single/{} (SCHEMA_ID={})", object_id, schema_id);
 
-    let address = address_cache.get_address(schema_id).await?;
-    let schema_type = schema_type_cache.get_schema_type(schema_id).await?;
+    let (address, schema_type) = cache.get_schema_info(schema_id).await?;
 
     let values = match (schema_type, request_body) {
         (SchemaType::DocumentStorage, _) => {
@@ -65,7 +60,7 @@ pub async fn query_single(
 pub async fn query_multiple(
     object_ids: String,
     schema_id: Uuid,
-    address_cache: Arc<AddressCache>,
+    cache: Arc<SchemaRegistryCache>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     trace!(
         "Received /multiple/{:?} (SCHEMA_ID={})",
@@ -73,7 +68,7 @@ pub async fn query_multiple(
         schema_id
     );
 
-    let address = address_cache.get_address(schema_id).await?;
+    let (address, _) = cache.get_schema_info(schema_id).await?;
     let object_ids = object_ids.split(',').map(str::to_owned).collect();
     let values = query_service::query_multiple(object_ids, address)
         .await
@@ -84,14 +79,12 @@ pub async fn query_multiple(
 
 pub async fn query_by_schema(
     schema_id: Uuid,
-    address_cache: Arc<AddressCache>,
-    schema_type_cache: Arc<SchemaTypeCache>,
+    cache: Arc<SchemaRegistryCache>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     trace!("Received /schema (SCHEMA_ID={})", schema_id);
 
-    let address = address_cache.get_address(schema_id).await?;
+    let (address, schema_type) = cache.get_schema_info(schema_id).await?;
 
-    let schema_type = schema_type_cache.get_schema_type(schema_id).await?;
     let reply = match schema_type {
         SchemaType::DocumentStorage => {
             let values = query_service::query_by_schema(schema_id.to_string(), address)

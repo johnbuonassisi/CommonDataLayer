@@ -1,4 +1,4 @@
-use cache::{AddressCache, SchemaTypeCache};
+use cache::SchemaRegistryCache;
 use std::sync::Arc;
 use structopt::StructOpt;
 use utils::metrics;
@@ -27,25 +27,18 @@ async fn main() {
 
     metrics::serve();
 
-    let address_cache = Arc::new(AddressCache::new(
-        config.schema_registry_addr.clone(),
-        config.cache_capacity,
-    ));
-
-    let schema_type_cache = Arc::new(SchemaTypeCache::new(
+    let schema_registry_cache = Arc::new(SchemaRegistryCache::new(
         config.schema_registry_addr,
         config.cache_capacity,
     ));
 
-    let address_filter = warp::any().map(move || address_cache.clone());
-    let schema_type_filter = warp::any().map(move || schema_type_cache.clone());
+    let address_filter = warp::any().map(move || schema_registry_cache.clone());
     let schema_id_filter = warp::header::header::<Uuid>("SCHEMA_ID");
     let body_filter = warp::body::content_length_limit(1024 * 32).and(warp::body::json());
 
     let single_route = warp::path!("single" / Uuid)
         .and(schema_id_filter)
         .and(address_filter.clone())
-        .and(schema_type_filter.clone())
         .and(body_filter)
         .and_then(handler::query_single);
     let multiple_route = warp::path!("multiple" / String)
@@ -55,7 +48,6 @@ async fn main() {
     let schema_route = warp::path!("schema")
         .and(schema_id_filter)
         .and(address_filter.clone())
-        .and(schema_type_filter.clone())
         .and_then(handler::query_by_schema);
     let routes = warp::get().and(single_route.or(multiple_route).or(schema_route));
 
