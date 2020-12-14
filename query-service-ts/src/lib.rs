@@ -1,4 +1,4 @@
-use crate::schema::{Range, SchemaId};
+use crate::schema::{Range, RawStatement, SchemaId};
 use schema::query_client::QueryClient;
 use tonic::transport::Channel;
 use utils::query_utils::error::ClientError;
@@ -44,4 +44,14 @@ pub async fn query_by_schema(schema_id: String, addr: String) -> Result<String, 
         .map_err(ClientError::QueryError)?;
 
     Ok(response.into_inner().timeseries)
+}
+
+pub async fn query_raw(raw_statement: String, addr: String) -> Result<Vec<u8>, ClientError> {
+    let mut conn = connect(addr).await?;
+    let response = conn
+        .query_raw(RawStatement { raw_statement })
+        .await
+        .map_err(ClientError::QueryError)?;
+
+    Ok(response.into_inner().value_bytes)
 }
