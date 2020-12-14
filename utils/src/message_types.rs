@@ -28,7 +28,7 @@ impl BorrowedInsertMessage<'_> {
             object_id: self.object_id,
             schema_id: self.schema_id,
             timestamp: self.timestamp,
-            data: serde_json::from_str(&self.data.get()).unwrap(),
+            data: serde_json::from_str(&self.data.get()).expect("RawValue wasn't valid json Value"),
         }
     }
 }
