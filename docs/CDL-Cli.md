@@ -12,7 +12,7 @@ Communication Methods:
 ## How to guide:
 
 #### Manipulate views
-views are a WIP feature, currently not used widely beside some cases in development.
+Views are a WIP feature, currently not used widely beside some cases in development.
 
 #### manipulate schemas
 
