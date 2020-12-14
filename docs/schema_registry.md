@@ -2,7 +2,7 @@
 
 ### Technical Description
 
-Schema Registy (also, `SR` for short) is responible for storing configuration about the data types handled by CDL. Schema Registry is a persistant graph database, that can be interfaced via grpc (other means of interaction are in progresss). Currently there is no GUI nor TUI. User interaction consist of internal tool [CDL-cli][CDL-cli]. There are also basic replication ability built-in.
+Schema registry (also, `SR` for short) is responsible for storing configuration about the data types handled by CDL. It is a persistent graph database, that can be queried via grpc (other means of interaction are in progress). Currently there is no GUI nor TUI. User interaction consist of internal tool [CDL-cli][CDL-cli]. There is also basic replication ability built-in.
 
 Interacts with:
 - nothing on its own
