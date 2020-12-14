@@ -11,7 +11,7 @@ Communication Methods:
 
 ## How to guide:
 
-#### manipulate views
+#### Manipulate views
 views are a WIP feature, currently not used widely beside some cases in development.
 
 #### manipulate schemas
