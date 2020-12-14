@@ -17,7 +17,7 @@ views are a WIP feature, currently not used widely beside some cases in developm
 #### manipulate schemas
 
 ###### add schema
-`cdl --registry-address "http:/localhost:6400 schema <add|get|names|update> --name <schemaname> \
+`cdl --registry-address "http://localhost:6400 schema <add|get|names|update> --name <schemaname> \
     --query-address <query-service-uri>" \
     --topic <ingest-topic> \
     --file <optional:schema-path>
