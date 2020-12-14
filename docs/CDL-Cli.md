@@ -29,6 +29,6 @@ views are a WIP feature, currently not used widely beside some cases in developm
 - minimal valid json schema is `{}`
 - random schema id will be assigned to the request
 
-###### list schemas
+###### List schemas
 - will print all existing schema names and IDs:
 `cdl --registry-address "http:/localhost:6400 schema names`
