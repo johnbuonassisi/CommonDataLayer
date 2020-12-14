@@ -29,7 +29,7 @@ async fn main() -> anyhow::Result<()> {
         name: config.schema_app_name,
         election_type: LeaderElectorType::Schema,
         port: config.schema_port,
-        namespace
+        namespace,
     };
 
     schema_elector.elect_leader().await
@@ -47,7 +47,7 @@ struct LeaderElector {
     port: u16,
     heartbeat_time: Duration,
     election_type: LeaderElectorType,
-    namespace:String
+    namespace: String,
 }
 
 impl LeaderElector {
@@ -113,14 +113,15 @@ impl LeaderElector {
 }
 
 fn schema_heartbeat(addr: &str, port: u16) -> impl Future<Output = anyhow::Result<()>> + '_ {
-        schema_registry::heartbeat(format!("{}:{}", addr, port)).map(|x| x.map_err(anyhow::Error::new))
+    schema_registry::heartbeat(format!("{}:{}", addr, port)).map(|x| x.map_err(anyhow::Error::new))
 }
 
 fn schema_promotion(addr: &str, port: u16) -> impl Future<Output = anyhow::Result<String>> + '_ {
-        schema_registry::promote_to_master(format!("{}:{}", addr, port))
+    schema_registry::promote_to_master(format!("{}:{}", addr, port))
         .map(|x| x.map_err(anyhow::Error::new))
 }
 
-fn get_k8s_namespace()->String{
-        fs::read_to_string("/var/run/secrets/kubernetes.io/serviceaccount/namespace").expect("Not running in k8s environment")
+fn get_k8s_namespace() -> String {
+    fs::read_to_string("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
+        .expect("Not running in k8s environment")
 }
