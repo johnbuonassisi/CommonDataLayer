@@ -2,12 +2,12 @@ use crate::communication::resolution::Resolution;
 use crate::communication::GenericMessage;
 use crate::output::victoria_metrics::config::VictoriaMetricsConfig;
 use crate::output::OutputPlugin;
-use itertools::Itertools;
+use fnv::FnvHashMap;
 use log::error;
 use reqwest::Url;
 use reqwest::{Client, StatusCode};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::iter;
 use thiserror::Error as DeriveError;
 use url::ParseError;
 use utils::metrics::counter;
@@ -24,14 +24,14 @@ pub struct VictoriaMetricsOutputPlugin {
 pub enum Error {
     #[error("Url was invalid `{0}`")]
     InvalidUrl(ParseError),
-    #[error("Data section must be deserializable to JSON")]
-    DataIsNotValidJson(serde_json::Error),
-    #[error("Data section must be a JSON Object")]
-    DataIsNotAJsonObject,
+    #[error("Data cannot be parsed")]
+    DataCannotBeParsed(serde_json::Error),
     #[error("Value cannot be an object, array or null")]
     InvalidFieldType,
     #[error("Cannot handle empty payload")]
     EmptyFields,
+    #[error("Field(s) timestamp is missing")]
+    FieldTimeStampMissing,
 }
 
 impl VictoriaMetricsOutputPlugin {
@@ -55,11 +55,11 @@ impl OutputPlugin for VictoriaMetricsOutputPlugin {
         let GenericMessage {
             object_id,
             schema_id,
-            timestamp,
+            timestamp: _, // ignored for now
             payload,
         } = msg;
 
-        match build_line_protocol(schema_id, object_id, timestamp, &payload) {
+        match build_line_protocol(schema_id, object_id, &payload) {
             Ok(line_protocol) => send_data(url, &self.client, line_protocol).await,
             Err(err) => {
                 let context = String::from_utf8_lossy(&payload).to_string();
@@ -81,40 +81,57 @@ impl OutputPlugin for VictoriaMetricsOutputPlugin {
     }
 }
 
-fn build_line_protocol(
-    measurement: Uuid,
-    tag: Uuid,
-    timestamp: i64,
-    payload: &[u8],
-) -> Result<String, Error> {
-    let fields_raw: Value = serde_json::from_slice(payload).map_err(Error::DataIsNotValidJson)?;
+#[derive(Serialize, Deserialize, Debug)]
+struct Payload {
+    fields: FnvHashMap<String, Value>,
+    ts: Value,
+}
 
-    if let Value::Object(obj) = fields_raw {
-        if obj.is_empty() {
-            return Err(Error::EmptyFields);
-        }
+fn build_line_protocol(measurement: Uuid, tag: Uuid, payload: &[u8]) -> Result<String, Error> {
+    let payloads: Vec<Payload> =
+        serde_json::from_slice(payload).map_err(Error::DataCannotBeParsed)?;
+    let line_protocol = payloads
+        .into_iter()
+        .map(|obj| {
+            Ok(format!(
+                "{},object_id={} {} {}",
+                measurement,
+                tag,
+                get_object_fields(&obj)?,
+                get_object_timestamp(&obj)?,
+            ))
+        })
+        .collect::<Result<Vec<String>, Error>>()?
+        .join("\n");
 
-        let len = obj.len();
+    Ok(line_protocol)
+}
 
-        let fields = obj
-            .into_iter()
-            .map(|(key, value)| {
-                if value.is_array() || value.is_object() || value.is_null() {
-                    Err(Error::InvalidFieldType)
-                } else {
-                    Ok(format!("{}={}", key, value))
-                }
-            })
-            .interleave(iter::repeat_with(|| Ok(",".to_string())).take(len - 1))
-            .collect::<Result<String, Error>>()?;
-
-        Ok(format!(
-            "{},object_id={} {} {}",
-            measurement, tag, fields, timestamp
-        ))
-    } else {
-        Err(Error::DataIsNotAJsonObject)
+fn get_object_timestamp(request_object: &Payload) -> Result<String, Error> {
+    let timestamp = &request_object.ts;
+    if timestamp.is_array() || timestamp.is_null() || timestamp.is_object() {
+        return Err(Error::InvalidFieldType);
+    }else if timestamp.is_string() && timestamp==""{
+        return Err(Error::FieldTimeStampMissing);
     }
+    Ok(timestamp.to_string())
+}
+
+fn get_object_fields(request_object: &Payload) -> Result<String, Error> {
+    if request_object.fields.is_empty() {
+        return Err(Error::EmptyFields);
+    }
+    Ok(request_object
+        .fields
+        .iter()
+        .map(|(key, value)| {
+            if value.is_array() || value.is_null() || value.is_object() {
+                return Err(Error::InvalidFieldType);
+            }
+            Ok(format!("{}={}", key, value.to_string()))
+        })
+        .collect::<Result<Vec<String>, Error>>()?
+        .join(","))
 }
 
 async fn send_data(url: Url, client: &Client, line_protocol: String) -> Resolution {
@@ -149,87 +166,94 @@ mod tests {
         use test_case::test_case;
         use uuid::Uuid;
 
-        #[test_case("{}"                => matches Err(Error::EmptyFields))]
-        #[test_case("{ \"y01\": {} }"   => matches Err(Error::InvalidFieldType))]
-        #[test_case("y00=32q,y01=14.0f" => matches Err(Error::DataIsNotValidJson(_)))]
-        #[test_case("[ 1, 13 ]"         => matches Err(Error::DataIsNotAJsonObject))]
+        #[test_case(r#"[{"fields":{}, "ts": 15}]"#                => matches Err(Error::EmptyFields))]
+        #[test_case(r#"[{"fields":{"y01": {}}, "ts": 10}]"#   => matches Err(Error::InvalidFieldType))]
+        #[test_case(r#"[{"fields":{"y01": []}, "ts": 5}]"#   => matches Err(Error::InvalidFieldType))]
+        #[test_case(r#"[{"fields":{"y01": null}, "ts": 1}]"#   => matches Err(Error::InvalidFieldType))]
+        #[test_case(r#"[{"fields":{"y01": 123}, "ts": {}}]"#   => matches Err(Error::InvalidFieldType))]
+        #[test_case(r#"[{"fields":{"y01": 1234}, "ts": []}]"#   => matches Err(Error::InvalidFieldType))]
+        #[test_case(r#"[{"fields":{"y01": 12345}, "ts": null}]"#   => matches Err(Error::InvalidFieldType))]
+        #[test_case(r#"y00=32q,y01=14.0f"#     => matches Err(Error::DataCannotBeParsed(_)))]
+        #[test_case(r#"{"fields" : {"y01": 13.4}, "ts": 123 }"#       => matches Err(Error::DataCannotBeParsed(_)))]
+        #[test_case(r#"[ 1, 13 ]"#             => matches Err(Error::DataCannotBeParsed(_)))]
         fn produces_desired_errors(payload: &str) -> Result<String, Error> {
-            build_line_protocol(
-                Uuid::default(),
-                Uuid::default(),
-                i64::default(),
-                payload.as_bytes(),
-            )
+            build_line_protocol(Uuid::default(), Uuid::default(), payload.as_bytes())
         }
 
         struct TestCase {
             object_id: &'static str,
             schema_id: &'static str,
-            version: i64,
             payload: &'static str,
         }
 
         const TEST_CASE_1: TestCase = TestCase {
             object_id: "00000000-0000-0000-0000-000000000000",
             schema_id: "00000000-0000-0000-0000-000000000000",
-            version: 0,
-            payload: r#"{ "y01": 13.4 }"#,
+            payload: r#"[{"fields":{"y01": 13.4}, "ts": 123}]"#,
         };
 
         const TEST_CASE_2: TestCase = TestCase {
             object_id: "00000000-0000-0000-0000-000000000000",
             schema_id: "00000000-0000-0000-0000-000000000000",
-            version: 1603887165,
-            payload: r#"{ "y01": 13.4 }"#,
+            payload: r#"[{"fields":{"y01": 13.4}, "ts": 1603887165}]"#,
         };
 
         const TEST_CASE_3: TestCase = TestCase {
             object_id: "00000000-0000-0000-0000-000000000000",
             schema_id: "10b7a9cd-0daf-4cb6-a7ef-b9db6058a2d3",
-            version: 0,
-            payload: r#"{ "y01": 13.4 }"#,
+            payload: r#"[{"fields": {"y01": 13.4}, "ts": 123}]"#,
         };
 
         const TEST_CASE_4: TestCase = TestCase {
             object_id: "85cf3b2e-0c9c-40e1-ade3-4596a2e1d9b6",
             schema_id: "00000000-0000-0000-0000-000000000000",
-            version: 0,
-            payload: r#"{ "y01": 13.4 }"#,
+            payload: r#"[{"fields": {"y01": 13.4}, "ts": 123}]"#,
         };
 
         const TEST_CASE_5: TestCase = TestCase {
             object_id: "00000000-0000-0000-0000-000000000000",
             schema_id: "00000000-0000-0000-0000-000000000000",
-            version: 0,
-            payload: r#"{ "y01": 13.4, "y02": 12.2 }"#,
+            payload: r#"[{"fields": {"y01": 13.4, "y02": 12.2}, "ts": 123}]"#,
         };
 
         const TEST_CASE_6: TestCase = TestCase {
             object_id: "00000000-0000-0000-0000-000000000000",
             schema_id: "00000000-0000-0000-0000-000000000000",
-            version: 0,
-            payload: r#"{ "y01": true }"#,
+            payload: r#"[{"fields": {"y01": true}, "ts": 123}]"#,
         };
 
         const TEST_CASE_7: TestCase = TestCase {
             object_id: "00000000-0000-0000-0000-000000000000",
             schema_id: "00000000-0000-0000-0000-000000000000",
-            version: 0,
-            payload: r#"{ "y01": "some-msg" }"#,
+            payload: r#"[{"fields": {"y01": "some-msg"}, "ts": 123}]"#,
         };
 
-        #[test_case(TEST_CASE_1 => "00000000-0000-0000-0000-000000000000,object_id=00000000-0000-0000-0000-000000000000 y01=13.4 0")]
+        const TEST_CASE_8: TestCase = TestCase {
+            object_id: "00000000-0000-0000-0000-000000000000",
+            schema_id: "00000000-0000-0000-0000-000000000000",
+            payload: r#"[
+                            { "fields": {"y01": 123, "y02": 54321}, "ts": 1234 },
+                            { "fields": {"y01": 321, "y02": 12345}, "ts": 4321 },
+                            { "fields": {"z01": true, "a02": "string"}, "ts": 0 }
+                        ]"#,
+        };
+
+        #[test_case(TEST_CASE_1 => "00000000-0000-0000-0000-000000000000,object_id=00000000-0000-0000-0000-000000000000 y01=13.4 123")]
         #[test_case(TEST_CASE_2 => "00000000-0000-0000-0000-000000000000,object_id=00000000-0000-0000-0000-000000000000 y01=13.4 1603887165" ; "changes timestamp")]
-        #[test_case(TEST_CASE_3 => "10b7a9cd-0daf-4cb6-a7ef-b9db6058a2d3,object_id=00000000-0000-0000-0000-000000000000 y01=13.4 0"          ; "changes schema_id")]
-        #[test_case(TEST_CASE_4 => "00000000-0000-0000-0000-000000000000,object_id=85cf3b2e-0c9c-40e1-ade3-4596a2e1d9b6 y01=13.4 0"          ; "changes object_id")]
-        #[test_case(TEST_CASE_5 => "00000000-0000-0000-0000-000000000000,object_id=00000000-0000-0000-0000-000000000000 y01=13.4,y02=12.2 0" ; "handles many fields")]
-        #[test_case(TEST_CASE_6 => "00000000-0000-0000-0000-000000000000,object_id=00000000-0000-0000-0000-000000000000 y01=true 0"          ; "handles boolean fields")]
-        #[test_case(TEST_CASE_7 => "00000000-0000-0000-0000-000000000000,object_id=00000000-0000-0000-0000-000000000000 y01=\"some-msg\" 0"  ; "handles string fields")]
+        #[test_case(TEST_CASE_3 => "10b7a9cd-0daf-4cb6-a7ef-b9db6058a2d3,object_id=00000000-0000-0000-0000-000000000000 y01=13.4 123"          ; "changes schema_id")]
+        #[test_case(TEST_CASE_4 => "00000000-0000-0000-0000-000000000000,object_id=85cf3b2e-0c9c-40e1-ade3-4596a2e1d9b6 y01=13.4 123"          ; "changes object_id")]
+        #[test_case(TEST_CASE_5 => "00000000-0000-0000-0000-000000000000,object_id=00000000-0000-0000-0000-000000000000 y01=13.4,y02=12.2 123" ; "handles many fields")]
+        #[test_case(TEST_CASE_6 => "00000000-0000-0000-0000-000000000000,object_id=00000000-0000-0000-0000-000000000000 y01=true 123"          ; "handles boolean fields")]
+        #[test_case(TEST_CASE_7 => "00000000-0000-0000-0000-000000000000,object_id=00000000-0000-0000-0000-000000000000 y01=\"some-msg\" 123"  ; "handles string fields")]
+        #[test_case(TEST_CASE_8 => 
+"00000000-0000-0000-0000-000000000000,object_id=00000000-0000-0000-0000-000000000000 y01=123,y02=54321 1234
+00000000-0000-0000-0000-000000000000,object_id=00000000-0000-0000-0000-000000000000 y01=321,y02=12345 4321
+00000000-0000-0000-0000-000000000000,object_id=00000000-0000-0000-0000-000000000000 a02=\"string\",z01=true 0"; 
+"handles multiple objects")]
         fn produces_desired_correct_output(case: TestCase) -> String {
             build_line_protocol(
                 case.schema_id.parse().unwrap(),
                 case.object_id.parse().unwrap(),
-                case.version,
                 case.payload.as_bytes(),
             )
             .unwrap()
